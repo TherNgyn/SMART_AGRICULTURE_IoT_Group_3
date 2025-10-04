@@ -24,7 +24,6 @@ services:
     environment:
       KAFKA_ADVERTISED_HOST_NAME: kafka
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_CREATE_TOPICS: "sensor-data:1:1,alerts:1:1"
     depends_on:
       - zookeeper
     networks:
@@ -38,7 +37,6 @@ services:
       MQTT_PORT: 1883
       MQTT_TOPIC: sensor-data
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_TOPIC: sensor-data
     depends_on:
       - hivemq
       - kafka
