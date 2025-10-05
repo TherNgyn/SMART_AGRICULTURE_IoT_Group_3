@@ -1,0 +1,59 @@
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    networks: [agri]
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+      - ZOOKEEPER_TICK_TIME=2000
+    networks: [agri]
+
+  simulator:
+    build:
+      context: .
+      dockerfile: ./simulator/Dockerfile
+    container_name: iot-simulator
+    env_file: .env
+    volumes:
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./.env:/app/.env
+    command: >
+      sh -c "python /app/scripts/split_data.py && 
+             python /app/scripts/iot_simulator.py"
+    depends_on:
+      - kafka
+    networks: [agri]
+
+  bridge:
+    build:
+      context: .
+      dockerfile: ./bridge/Dockerfile
+    container_name: mqtt-kafka-bridge
+    env_file: .env
+    volumes:
+      - ./scripts:/app/scripts
+      - ./.env:/app/.env
+    command: python /app/scripts/mqtt_kafka_bridge.py
+    depends_on:
+      - kafka
+    networks: [agri]
+
+networks:
+  agri:
+    driver: bridge
