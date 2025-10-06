@@ -100,11 +100,12 @@ services:
 
   # MongoDB
   mongodb:
-    image: mongo:latest
+    image: mongo:6.0
+    container_name: mongoDB
     ports:
       - "27017:27017"
     volumes:
-      - mongo_data:/data/db   # Volume lưu dữ liệu MongoDB
+      - ./mongo_data:/data/db   # Volume lưu dữ liệu MongoDB
     networks:
       - smart-agri-net
 

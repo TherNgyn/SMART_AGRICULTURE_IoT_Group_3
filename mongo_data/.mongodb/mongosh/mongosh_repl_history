@@ -1,0 +1,13 @@
+show collections 
+show collection 
+use Realtime-project
+exit
+show collections
+db.sensor_raw.find()
+db.createCollection("alerts")
+db.createCollection("sensor_predicted")
+db.createCollection("sensor_raw")
+show collections
+show collection s
+show collection 
+use Realtime-project
