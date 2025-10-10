@@ -24,7 +24,7 @@ if __name__ == "__main__":
         MQTT_TOPIC = os.environ.get("MQTT_TOPIC", "sensor-data")
         QOS = int(os.environ.get("MQTT_QOS", "1"))
         
-        KAFKA_BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP", "kafka:9092")
+        KAFKA_BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP", "localhost:9092")
         KAFKA_TOPIC = os.environ.get("KAFKA_TOPIC", "sensor-data")
         
         print("Configuration loaded:", flush=True)
