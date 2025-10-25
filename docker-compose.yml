@@ -2,12 +2,12 @@ version: '3.8'
 
 services:
   # MQTT Broker (HiveMQ Community Edition)
-  hivemq:
-    image: hivemq/hivemq-ce:latest
-    ports:
-      - "1883:1883"
-    networks:
-      - smart-agri-net
+  # hivemq:
+  #   image: hivemq/hivemq-ce:latest
+  #   ports:
+  #     - "1883:1883"
+  #   networks:
+  #     - smart-agri-net
 
   # Kafka & Zookeeper
   zookeeper:
@@ -30,38 +30,38 @@ services:
       - smart-agri-net
 
   # MQTT-Kafka Bridge
-  mqtt-kafka-bridge:
-    build: ./mqtt-kafka-bridge
-    environment:
-      MQTT_BROKER: hivemq
-      MQTT_PORT: 1883
-      MQTT_TOPIC: sensor-data
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    depends_on:
-      - hivemq
-      - kafka
-    networks:
-      - smart-agri-net
+  # mqtt-kafka-bridge:
+  #   build: ./mqtt-kafka-bridge
+  #   environment:
+  #     MQTT_BROKER: hivemq
+  #     MQTT_PORT: 1883
+  #     MQTT_TOPIC: sensor-data
+  #     KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  #   depends_on:
+  #     - hivemq
+  #     - kafka
+  #   networks:
+  #     - smart-agri-net
 
   # Sensor Simulator (giả lập cảm biến gửi lên MQTT)
-  sensor-simulator:
-    build: ./sensor-simulator
-    volumes:
-      - ./data:/data
-    environment:
-      MQTT_BROKER: hivemq
-      MQTT_PORT: 1883
-      MQTT_TOPIC: sensor-data
-      CSV_FILE: /data/sensor_data.csv
-      INTERVAL: 5
-    depends_on:
-      - hivemq
-    networks:
-      - smart-agri-net
+  # sensor-simulator:
+  #   build: ./sensor-simulator
+  #   volumes:
+  #     - ./data:/data
+  #   environment:
+  #     MQTT_BROKER: hivemq
+  #     MQTT_PORT: 1883
+  #     MQTT_TOPIC: sensor-data
+  #     CSV_FILE: /data/sensor_data.csv
+  #     INTERVAL: 5
+  #   depends_on:
+  #     - hivemq
+  #   networks:
+  #     - smart-agri-net
 
   # Spark Master
   spark-master:
-    image: bitnami/spark:latest
+    image: bitnami/spark:3.5.0
     environment:
       - SPARK_MODE=master
     ports:
@@ -69,10 +69,15 @@ services:
       - "8080:8080"
     networks:
       - smart-agri-net
+    volumes:
+      - ./Scripts:/opt/bitnami/spark/Scripts
+    command: 
+     bash -c " pip install pymongo"
+
 
   # Spark Worker
   spark-worker:
-    image: bitnami/spark:latest
+    image: bitnami/spark:3.5.0
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
@@ -82,21 +87,21 @@ services:
       - smart-agri-net
 
   # Spark Structured Streaming App
-  spark-streaming:
-    build: ./spark-streaming-app
-    volumes:
-      - ./models:/models   # Volume lưu model ML
-    environment:
-      - SPARK_MASTER=spark://spark-master:7077
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - MONGODB_URI=mongodb://mongodb:27017
-      - MODEL_PATH=/models
-    depends_on:
-      - spark-master
-      - kafka
-      - mongodb
-    networks:
-      - smart-agri-net
+  # spark-streaming:
+  #   build: ./spark-streaming-app
+  #   volumes:
+  #     - ./models:/models   # Volume lưu model ML
+  #   environment:
+  #     - SPARK_MASTER=spark://spark-master:7077
+  #     - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+  #     - MONGODB_URI=mongodb://mongodb:27017
+  #     - MODEL_PATH=/models
+  #   depends_on:
+  #     - spark-master
+  #     - kafka
+  #     - mongodb
+  #   networks:
+  #     - smart-agri-net
 
   # MongoDB
   mongodb:
@@ -110,32 +115,32 @@ services:
       - smart-agri-net
 
   # Notification Service (Email/SMS/quạt làm mát)
-  notification:
-    build: ./notification
-    environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - EMAIL_SERVER=smtp.example.com
-      - EMAIL_USER=alerts@example.com
-      - EMAIL_PASS=password
-    depends_on:
-      - kafka
-    networks:
-      - smart-agri-net
+  # notification:
+  #   build: ./notification
+  #   environment:
+  #     - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+  #     - EMAIL_SERVER=smtp.example.com
+  #     - EMAIL_USER=alerts@example.com
+  #     - EMAIL_PASS=password
+  #   depends_on:
+  #     - kafka
+  #   networks:
+  #     - smart-agri-net
 
   # API/Dashboard (Flask/FastAPI/Streamlit)
-  api-dashboard:
-    build: ./api-dashboard
-    ports:
-      - "8501:8501"   # Nếu dùng Streamlit
-      - "5000:5000"   # Nếu dùng Flask/FastAPI
-    environment:
-      - MONGODB_URI=mongodb://mongodb:27017
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-    depends_on:
-      - mongodb
-      - kafka
-    networks:
-      - smart-agri-net
+  # api-dashboard:
+  #   build: ./api-dashboard
+  #   ports:
+  #     - "8501:8501"   # Nếu dùng Streamlit
+  #     - "5000:5000"   # Nếu dùng Flask/FastAPI
+  #   environment:
+  #     - MONGODB_URI=mongodb://mongodb:27017
+  #     - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+  #   depends_on:
+  #     - mongodb
+  #     - kafka
+  #   networks:
+  #     - smart-agri-net
 
 networks:
   smart-agri-net:

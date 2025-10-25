@@ -1,3 +1,11 @@
+exit
+clear
+delete tables sensor_raw
+delete table sensor_raw
+show tables
+show tb
+use Realtime-project
+exit
 show collections 
 show collection 
 use Realtime-project
