@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY ./api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install redis
 
 COPY ./api/api.py .
 

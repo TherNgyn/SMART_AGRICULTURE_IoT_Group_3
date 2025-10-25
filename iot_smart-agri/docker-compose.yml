@@ -100,6 +100,8 @@ services:
     volumes:
       - ./scripts:/app/scripts
     depends_on:
+      redis:
+        condition: service_healthy
       kafka:
         condition: service_healthy # Chờ Kafka sẵn sàng
       mongodb:
@@ -123,6 +125,19 @@ services:
       - agri
     restart: on-failure # Tự khởi động lại nếu bị lỗi
 
+  redis:
+      image: "redis:alpine"
+      container_name: redis
+      ports:
+        - "6379:6379"
+      networks:
+        - agri
+      healthcheck:
+        test: ["CMD", "redis-cli", "ping"]
+        interval: 5s
+        timeout: 3s
+        retries: 5
+
   # 8. Backend API (Chúng ta vừa tạo)
   api-backend:
     build:
@@ -133,6 +148,8 @@ services:
     ports:
       - "8000:8000" # Mở port 8000 ra máy host
     depends_on:
+      redis:
+        condition: service_healthy
       mongodb:
         condition: service_healthy
     networks:

@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y wget && \
     https://repo1.maven.org/maven2/org/apache/spark/spark-token-provider-kafka-0-10_2.12/3.5.1/spark-token-provider-kafka-0-10_2.12-3.5.1.jar && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+RUN pip install redis
+
 # Tạo thư mục app và set quyền
 RUN mkdir -p /app && chown -R spark:spark /app
 

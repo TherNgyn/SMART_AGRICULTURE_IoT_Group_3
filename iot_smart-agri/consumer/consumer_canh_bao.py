@@ -5,11 +5,12 @@ import os
 import time
 import logging
 import ssl  # Thêm import ssl
+import redis
 from email.mime.text import MIMEText
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
-from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
+# from pymongo import MongoClient
+# from pymongo.errors import ConnectionFailure
 
 # --- Cấu hình logging ---
 logging.basicConfig(level=logging.INFO,
