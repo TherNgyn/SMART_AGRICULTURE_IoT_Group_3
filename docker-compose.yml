@@ -71,6 +71,8 @@ services:
       - smart-agri-net
     volumes:
       - ./Scripts:/opt/bitnami/spark/Scripts
+      - ./models:/opt/bitnami/spark/models
+      - ./data:/opt/bitnami/spark/data
     command: 
      bash -c " pip install pymongo"
 

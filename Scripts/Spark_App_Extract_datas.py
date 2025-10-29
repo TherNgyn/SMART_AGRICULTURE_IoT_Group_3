@@ -5,7 +5,6 @@ from pymongo import MongoClient
 from pyspark.sql import DataFrame
 
 # --- 1. Tạo SparkSession với MongoDB connector ---
-# --- 1. Tạo SparkSession với MongoDB connector ---
 spark = SparkSession.builder \
     .appName("KafkaToMongoRaw") \
     .config("spark.mongodb.output.uri", "mongodb://localhost:27017/Realtime-project.raw_data") \
