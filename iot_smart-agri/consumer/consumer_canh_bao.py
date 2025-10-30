@@ -147,8 +147,6 @@ def process_message(data):
         stress_index = data.get('Stress_Index', 0)
         alerts_triggered.append(f"Sốc nhiệt: Chỉ số {stress_index}")
         send_fan_command = True
-
-    # (Thêm các else if cho các Alert_Type khác...)
     
     # 3. Gửi cảnh báo nếu có
     if alerts_triggered:

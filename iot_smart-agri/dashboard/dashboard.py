@@ -120,4 +120,4 @@ while True:
 
     # Tần suất làm mới dashboard (giây)
     time.sleep(REFRESH_RATE_SECONDS)
-    st.rerun() # <<< Lệnh để làm mới toàn bộ trang
+    st.rerun()

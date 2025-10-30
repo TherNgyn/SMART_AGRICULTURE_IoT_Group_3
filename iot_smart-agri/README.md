@@ -148,6 +148,64 @@ iot_smart-agri/
 ├── requirements.txt          # Python dependencies
 ```
 
+## Cấu hình
+
+Hệ thống sử dụng file `.env` để quản lý tất cả các biến môi trường.
+
+1.  Đảm bảo bạn có file `.env` ở thư mục gốc của dự án.
+2.  Mở file `.env` và **cấu hình các biến sau** để nhận email cảnh báo:
+
+    ```env
+    # ------------------------------------------------
+    # Cấu hình Gửi Email (cho alert-consumer)
+    # ------------------------------------------------
+    SMTP_SERVER=smtp.gmail.com
+    SMTP_PORT=587
+    EMAIL_USER=your_email@gmail.com
+    EMAIL_PASS=your_google_app_password # QUAN TRỌNG: Phải là Mật khẩu ứng dụng 16 ký tự
+    EMAIL_TO=recipient_email@example.com
+    ```
+
+3.  **Lấy Mật khẩu ứng dụng (EMAIL_PASS):**
+    * Bạn **không thể** dùng mật khẩu Gmail thông thường.
+    * Bật "Xác minh 2 bước" cho tài khoản Google của bạn.
+    * Vào [Bảo mật Tài khoản Google](https://myaccount.google.com/security) ➔ **Mật khẩu ứng dụng** ➔ tạo một mật khẩu mới cho "Ứng dụng khác" và dán 16 ký tự đó vào file `.env`.
+
+## Kiểm tra chức năng (Checklist)
+
+Sau khi chạy `docker-compose up --build` và chờ khoảng 1 phút, hãy thực hiện các bước sau:
+
+1.  **Kiểm tra Trạng thái Container:**
+    * Mở một Terminal mới và chạy: `docker ps`
+    * **Kết quả mong đợi:** Thấy **10 container** và tất cả đều có **STATUS** là `Up` hoặc `running (healthy)`.
+
+2.  **Kiểm tra Log Spark (`spark-processor`):**
+    * Chạy lệnh: `docker-compose logs spark-processor`
+    * **Kết quả mong đợi:**
+        * `Spark ket noi Redis thanh cong!`
+        * `[Redis Sink] Batch ... Ghi metrics va 5 bieu do vao Redis thanh cong!` (Lặp lại sau mỗi 5 giây)
+
+3.  **Kiểm tra Log API (`api-backend`):**
+    * Chạy lệnh: `docker-compose logs api-backend`
+    * **Kết quả mong đợi:**
+        * `INFO: API ket noi Redis thanh cong.`
+        * `INFO: Application startup complete.`
+        * Sau đó là một loạt các dòng `GET /metrics/realtime HTTP/1.1" 200 OK` và `GET /charts/... HTTP/1.1" 200 OK`.
+
+4.  **Kiểm tra Dashboard:**
+    * Mở trình duyệt và truy cập: `http://localhost:8501`
+    * **Kết quả mong đợi:**
+        * Các thẻ chỉ số (Nhiệt độ TB, Độ ẩm TB,...) hiển thị số liệu.
+        * Các biểu đồ real-time (Nhiệt độ, Độ ẩm,...) bắt đầu vẽ và cập nhật liên tục.
+
+5.  **Kiểm tra Cảnh báo Email:**
+    * Chờ `iot-simulator` gửi dữ liệu bất thường (ví dụ: nhiệt độ > 35°C).
+    * Quan sát log của `alert-consumer`: `docker-compose logs alert-consumer`
+    * **Kết quả mong đợi:**
+        * `Nhan du lieu canh bao: ...`
+        * `Da gui email canh bao: ...`
+    * Kiểm tra hộp thư `EMAIL_TO` của bạn.
+
 ## Monitoring & Analytics
 
 Hệ thống cung cấp:
