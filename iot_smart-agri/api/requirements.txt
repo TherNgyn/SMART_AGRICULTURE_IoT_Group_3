@@ -4,3 +4,4 @@ pymongo
 paho-mqtt
 pydantic
 python-dotenv
+redis

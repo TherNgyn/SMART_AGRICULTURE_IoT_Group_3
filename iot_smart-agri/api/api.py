@@ -103,7 +103,6 @@ async def get_chart_rgb():
     return get_chart_data_from_redis("chart_realtime_rgb")
 
 # === ENDPOINT CHO LỊCH SỬ CẢNH BÁO ===
-# (Lưu ý: Bạn CẦN sửa 'alert_consumer.py' để ghi vào 'realtime_alert_history' trong Redis)
 @app.get("/alerts/realtime", summary="Lấy lịch sử cảnh báo realtime từ Redis")
 async def get_realtime_alerts(limit: int = 20):
     if not redis_client:
@@ -119,7 +118,6 @@ async def get_realtime_alerts(limit: int = 20):
 # === ENDPOINT ĐIỀU KHIỂN ===
 @app.post("/control/", summary="Gửi lệnh điều khiển (Tưới nước/Quạt)")
 async def send_control_command(command: ControlCommand):
-    # (Code của hàm này giữ nguyên)
     if not MQTT_BROKER or not MQTT_USERNAME:
         logger.warning("API chưa cấu hình MQTT (BROKER, USERNAME). Không thể gửi lệnh.")
         raise HTTPException(status_code=500, detail="API chưa cấu hình MQTT")
