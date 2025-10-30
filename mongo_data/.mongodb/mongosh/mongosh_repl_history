@@ -1,3 +1,21 @@
+db.predictions.find()
+db.sensor_predicted.find()
+sensor_predicted.find()
+show tables
+use Realtime-project
+db.sensor_predicted.find()
+show tables
+db.raw_data.deleteMany({})
+db.raw_data.countDocuments()
+db.raw_data.find()
+db.sensor_raw.find()
+select * from table sensor_raw;
+select * from sensor_raw;
+select * from sensor_raw
+show tables
+ls
+use Realtime-project
+ls
 exit
 clear
 delete tables sensor_raw

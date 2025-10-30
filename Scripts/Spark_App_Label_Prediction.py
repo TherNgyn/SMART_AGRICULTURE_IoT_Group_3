@@ -5,15 +5,15 @@ from pyspark.ml import PipelineModel, Pipeline
 from pyspark.ml.feature import StringIndexer, VectorAssembler, StandardScaler
 from pymongo import MongoClient
 from datetime import datetime
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 import collections
 import os
 
 spark = SparkSession.builder \
     .appName("KafkaToMongoRaw") \
-    .config("spark.mongodb.output.uri", "mongodb://mongodb:27017/Realtime-project.predictions") \
+    .config("spark.mongodb.output.uri", "mongodb://mongodb:27017/Realtime-project.sensor_predicted") \
     .getOrCreate()
 
 # --- 2. Schema Kafka ---
@@ -43,6 +43,9 @@ json_df = raw_df.selectExpr("CAST(value AS STRING) as json_str") \
 def process_batch(df, epoch_id):
     if df.isEmpty():
         return
+    from pyspark.sql.functions import col, when, rand
+    import numpy
+    import torch
 
     df = df.withColumn(
         "RGB_Damage_Score",
@@ -97,39 +100,39 @@ def process_batch(df, epoch_id):
         def forward(self, x):
             return self.model(x)
 
-    # Load 2 model PyTorch
-    NDI_hidden_layers = [224, 192, 96, 224, 224, 192, 224, 64, 128, 192, 224, 160, 128, 129, 96]
-    activation = getattr(nn, "Tanh")
-    NDI_model = MLPClassifier(8, NDI_hidden_layers, 1, activation)
-    NDI_model.load_state_dict(torch.load("../models/best_modelNDI.pth"))
+    # # Load 2 model PyTorch
+    # NDI_hidden_layers = [224, 192, 96, 224, 224, 192, 224, 64, 128, 192, 224, 160, 128, 129, 96]
+    # activation = getattr(nn, "Tanh")
+    # NDI_model = MLPClassifier(8, NDI_hidden_layers, 1, activation)
+    # NDI_model.load_state_dict(torch.load("/opt/bitnami/spark/models/best_modelNDI.pth"))
 
     PDI_hidden_layers = [128, 128, 192, 256, 224, 64, 256, 224, 96]
     activation = getattr(nn, "LeakyReLU")
-    PDI_model = MLPClassifier(8, PDI_hidden_layers, 1, activation)
-    PDI_model.load_state_dict(torch.load("../models/best_modePNDI.pth"))
+    PDI_model = MLPClassifier(8, PDI_hidden_layers, 3, activation)
+    PDI_model.load_state_dict(torch.load("/opt/bitnami/spark/models/best_modelPDI.pth"))
 
     # --- 7. Dự đoán ---
     with torch.no_grad():
-        preds_NDI = torch.argmax(NDI_model(X_tensor), 1).numpy()
+        # preds_NDI = torch.argmax(NDI_model(X_tensor), 1).numpy()
         preds_PDI = torch.argmax(PDI_model(X_tensor), 1).numpy()
 
     # --- 8. Decode ---
     NDI_decoder = pipeline_model.stages[0]
     PDI_decoder = pipeline_model.stages[1]
-    NDI_decoded = [NDI_decoder.labels[i] for i in preds_NDI]
+    # NDI_decoded = [NDI_decoder.labels[i] for i in preds_NDI]
     PDI_decoded = [PDI_decoder.labels[i] for i in preds_PDI]
 
-    NDI_mode = collections.Counter(NDI_decoded).most_common(1)[0]
+    # NDI_mode = collections.Counter(NDI_decoded).most_common(1)[0]
     PDI_mode = collections.Counter(PDI_decoded).most_common(1)[0]
 
     # --- 9. Ghi vào MongoDB ---
     client = MongoClient("mongodb://mongodb:27017/")
     db = client["Realtime-project"]
-    col = db["predictions"]
+    col = db["sensor_predicted"]
 
     result = {
         "timestamp": datetime.now().isoformat(),
-        "NDI_Prediction": NDI_mode[0],
+        # "NDI_Prediction": NDI_mode[0],
         "PDI_Prediction": PDI_mode[0]
     }
 

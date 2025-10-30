@@ -1,0 +1,1 @@
+{"class":"org.apache.spark.ml.feature.VectorAssembler","timestamp":1761841220509,"sparkVersion":"3.5.0","uid":"VectorAssembler_40b42af253dd","paramMap":{"inputCols":["N","P","K","Moisture","pH","Temperature","Humidity","RGB_Damage_Score"],"outputCol":"features_unscaled"},"defaultParamMap":{"outputCol":"VectorAssembler_40b42af253dd__output","handleInvalid":"error"}}
