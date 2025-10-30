@@ -23,10 +23,11 @@ if __name__ == "__main__":
         MQTT_PASSWORD = os.environ["MQTT_PASSWORD"]
         MQTT_TOPIC = os.environ.get("MQTT_TOPIC", "sensor-data")
         QOS = int(os.environ.get("MQTT_QOS", "1"))
-        
+
+        KAFKA_SERVER = os.getenv('KAFKA_SERVER', 'kafka:29092')
         KAFKA_BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP", "localhost:9092")
-        KAFKA_TOPIC = os.environ.get("KAFKA_TOPIC", "sensor-data")
-        
+        KAFKA_TOPIC = os.environ.get("KAFKA_TOPIC_SENSOR", "sensor-data")
+        KAFKA_ALERTS_TOPIC = os.environ.get("KAFKA_TOPIC_ALERTS", "alerts")
         print("Configuration loaded:", flush=True)
         print(f"  MQTT: {MQTT_BROKER}:{MQTT_PORT}/{MQTT_TOPIC}", flush=True)
         print(f"  Kafka: {KAFKA_BOOTSTRAP}/{KAFKA_TOPIC}", flush=True)

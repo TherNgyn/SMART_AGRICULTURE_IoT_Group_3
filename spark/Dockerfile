@@ -23,9 +23,10 @@ USER spark
 
 WORKDIR /app
 
-COPY scripts/spark_processor.py .
+COPY scripts/spark_eda_windowing.py .
+COPY scripts/spark_alert_dashboard.py .
 
-CMD ["/opt/spark/bin/spark-submit", \
-     "--master", "local[*]", \
-     "--jars", "/opt/spark/jars/custom/spark-sql-kafka-0-10_2.12-3.5.1.jar,/opt/spark/jars/custom/kafka-clients-3.4.1.jar,/opt/spark/jars/custom/commons-pool2-2.11.1.jar,/opt/spark/jars/custom/spark-token-provider-kafka-0-10_2.12-3.5.1.jar", \
-     "spark_processor.py"]
+CMD bash -c "/opt/spark/bin/spark-submit \
+    --master spark://spark-master:7077 \
+    --jars /opt/spark/jars/custom/spark-sql-kafka-0-10_2.12-3.5.1.jar,/opt/spark/jars/custom/kafka-clients-3.4.1.jar,/opt/spark/jars/custom/commons-pool2-2.11.1.jar,/opt/spark/jars/custom/spark-token-provider-kafka-0-10_2.12-3.5.1.jar \
+    /app/${SPARK_SCRIPT}"

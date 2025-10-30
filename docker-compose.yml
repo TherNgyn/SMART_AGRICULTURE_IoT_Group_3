@@ -40,7 +40,7 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - ./mongo-data:/data/db
+      - ./mongo_data:/data/db
     networks:
       - agri
     healthcheck:
@@ -83,21 +83,71 @@ services:
     networks:
       - agri
 
-  spark-processor:
+  spark-eda:
     build:
       context: .
       dockerfile: ./spark/Dockerfile
-    container_name: spark-processor
-    env_file: .env 
+    container_name: spark-eda
+    env_file: .env
+    environment:
+      - SPARK_SCRIPT=spark_eda_windowing.py
+      - SPARK_MASTER_URL=spark://spark-master:7077
     volumes:
       - ./scripts:/app/scripts
     depends_on:
-      redis:
-        condition: service_healthy
       kafka:
-        condition: service_healthy 
+        condition: service_healthy
       mongodb:
-        condition: service_healthy 
+        condition: service_healthy
+      spark-master:
+        condition: service_started
+    networks:
+      - agri
+
+  spark-alert:
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile
+    container_name: spark-alert
+    env_file: .env
+    environment:
+      - SPARK_SCRIPT=spark_alert_dashboard.py
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./scripts:/app/scripts
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      spark-master:
+        condition: service_started
+    networks:
+      - agri
+
+  spark-master:
+    image: apache/spark:3.5.1-python3
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark-master
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    networks:
+      - agri
+
+  spark-worker:
+    image: apache/spark:3.5.1-python3
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
     networks:
       - agri
 

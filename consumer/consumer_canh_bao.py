@@ -53,38 +53,6 @@ try:
 except Exception as e:
     logger.error(f"Alert Consumer LỖI ket noi Redis: {e}")
     redis_client = None
-# -----------------------------------
-
-# # --- Kết nối MongoDB ---
-# try:
-#     mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-#     mongo_client.server_info() 
-#     db = mongo_client[DB_NAME]
-#     alert_collection = db[ALERT_COLLECTION]
-#     logger.info("Kết nối MongoDB thành công.")
-# except ConnectionFailure as e:
-#     logger.error(f"Lỗi kết nối MongoDB: {e}")
-#     exit(1)
-
-# def send_email_alert(subject, body):
-#     """Gửi cảnh báo qua Email."""
-#     if not EMAIL_USER or not EMAIL_PASS or not EMAIL_TO:
-#         logger.warning("Chưa cấu hình email (EMAIL_USER, EMAIL_PASS, EMAIL_TO). Bỏ qua gửi email.")
-#         return
-
-#     try:
-#         msg = MIMEText(body)
-#         msg['Subject'] = subject
-#         msg['From'] = EMAIL_USER
-#         msg['To'] = EMAIL_TO
-
-#         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-#             server.starttls()
-#             server.login(EMAIL_USER, EMAIL_PASS)
-#             server.sendmail(EMAIL_USER, [EMAIL_TO], msg.as_string())
-#         logger.info(f"Đã gửi email cảnh báo: {subject}")
-#     except Exception as e:
-#         logger.error(f"Lỗi khi gửi email: {e}")
 
 def send_email_alert(subject, body):
     """Gửi cảnh báo qua Email."""
