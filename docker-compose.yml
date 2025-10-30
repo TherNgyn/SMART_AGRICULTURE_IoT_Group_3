@@ -1,0 +1,165 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - agri
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      # Nội bộ 
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
+      # Listener cho giao tiếp bên ngoài Docker 
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    networks:
+      - agri
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "kafka:29092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./mongo-data:/data/db
+    networks:
+      - agri
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  simulator:
+    build:
+      context: .
+      dockerfile: ./simulator/Dockerfile
+    container_name: iot-simulator
+    env_file: .env 
+    volumes:
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./.env:/app/.env
+    depends_on:
+      - kafka 
+    command: >
+      sh -c "python /app/scripts/split_data.py && 
+             python /app/scripts/iot_simulator.py"
+    networks:
+      - agri
+
+  bridge:
+    build:
+      context: .
+      dockerfile: ./bridge/Dockerfile
+    container_name: mqtt-kafka-bridge
+    env_file: .env 
+    volumes:
+      - ./scripts:/app/scripts
+      - ./.env:/app/.env
+    depends_on:
+      kafka:
+        condition: service_healthy 
+    command: python /app/scripts/mqtt_kafka_bridge.py
+    networks:
+      - agri
+
+  spark-processor:
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile
+    container_name: spark-processor
+    env_file: .env 
+    volumes:
+      - ./scripts:/app/scripts
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy 
+      mongodb:
+        condition: service_healthy 
+    networks:
+      - agri
+
+  alert-consumer:
+    build:
+      context: .
+      dockerfile: ./consumer/Dockerfile
+    container_name: alert-consumer
+    env_file: .env 
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - agri
+    restart: on-failure 
+
+  redis:
+      image: "redis:alpine"
+      container_name: redis
+      ports:
+        - "6379:6379"
+      networks:
+        - agri
+      healthcheck:
+        test: ["CMD", "redis-cli", "ping"]
+        interval: 5s
+        timeout: 3s
+        retries: 5
+
+  api-backend:
+    build:
+      context: .
+      dockerfile: ./api/Dockerfile
+    container_name: api-backend
+    env_file: .env
+    ports:
+      - "8000:8000" 
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - agri
+    restart: on-failure
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: ./dashboard/Dockerfile
+    container_name: streamlit-dashboard
+    env_file: .env 
+    ports:
+      - "8501:8501" 
+    depends_on:
+      - api-backend 
+    networks:
+      - agri
+    restart: on-failure
+
+networks:
+  agri:
+    driver: bridge
