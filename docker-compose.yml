@@ -1,143 +1,331 @@
-version: '3.8'
-
 services:
-  # MQTT Broker (HiveMQ Community Edition)
-  hivemq:
-    image: hivemq/hivemq-ce:latest
-    ports:
-      - "1883:1883"
-    networks:
-      - smart-agri-net
-
-  # Kafka & Zookeeper
   zookeeper:
-    image: wurstmeister/zookeeper
-    ports:
-      - "2181:2181"
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     networks:
-      - smart-agri-net
+      - agri
 
   kafka:
-    image: wurstmeister/kafka
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      # Nội bộ 
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
+      # Listener cho giao tiếp bên ngoài Docker 
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     ports:
       - "9092:9092"
-    environment:
-      KAFKA_ADVERTISED_HOST_NAME: kafka
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
     depends_on:
       - zookeeper
     networks:
-      - smart-agri-net
+      - agri
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "kafka:29092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
 
-  # MQTT-Kafka Bridge
-  mqtt-kafka-bridge:
-    build: ./mqtt-kafka-bridge
-    environment:
-      MQTT_BROKER: hivemq
-      MQTT_PORT: 1883
-      MQTT_TOPIC: sensor-data
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    depends_on:
-      - hivemq
-      - kafka
-    networks:
-      - smart-agri-net
-
-  # Sensor Simulator (giả lập cảm biến gửi lên MQTT)
-  sensor-simulator:
-    build: ./sensor-simulator
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
     volumes:
-      - ./data:/data
-    environment:
-      MQTT_BROKER: hivemq
-      MQTT_PORT: 1883
-      MQTT_TOPIC: sensor-data
-      CSV_FILE: /data/sensor_data.csv
-      INTERVAL: 5
-    depends_on:
-      - hivemq
+      - ./mongo_data:/data/db
     networks:
-      - smart-agri-net
+      - agri
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
 
-  # Spark Master
+  simulator:
+    build:
+      context: .
+      dockerfile: ./simulator/Dockerfile
+    container_name: iot-simulator
+    env_file: .env
+    volumes:
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./.env:/app/.env
+    user: root
+    command: >
+      sh -c "python /app/scripts/split_data.py && 
+             python /app/scripts/iot_simulator.py"
+    depends_on:
+      - kafka
+    networks: 
+      - agri
+
+
+  bridge:
+    build:
+      context: .
+      dockerfile: ./bridge/Dockerfile
+    container_name: mqtt-kafka-bridge
+    env_file: .env 
+    volumes:
+      - ./scripts:/app/scripts
+      - ./.env:/app/.env
+    depends_on:
+      kafka:
+        condition: service_healthy 
+    command: python /app/scripts/mqtt_kafka_bridge.py
+    networks:
+      - agri
+
+  mqtt-alert-consumer:
+    build:
+      context: .
+      dockerfile: ./bridge/Dockerfile
+    container_name: mqtt-alert-consumer
+    env_file: .env
+    volumes:
+      - ./scripts:/app/scripts
+      - ./.env:/app/.env
+    command: python /app/scripts/mqtt_alert_consumer.py
+    networks:
+      - agri
+    restart: on-failure
+  
+  actuator-simulator:
+    build:
+      context: .
+      dockerfile: ./bridge/Dockerfile
+    container_name: actuator-simulator
+    env_file: .env
+    volumes:
+      - ./scripts:/app/scripts
+      - ./.env:/app/.env
+    command: python /app/scripts/actuator_simulator.py
+    networks:
+      - agri
+    restart: on-failure
+
+  spark-eda:
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile
+    container_name: spark-eda
+    env_file: .env
+    environment:
+      - SPARK_SCRIPT=spark_eda_windowing.py
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./scripts:/app/scripts
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      spark-master:
+        condition: service_started
+    networks:
+      - agri
+
+  spark-alert:
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile
+    container_name: spark-alert
+    env_file: .env
+    environment:
+      - SPARK_SCRIPT=spark_alert_dashboard.py
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./scripts:/app/scripts
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      spark-master:
+        condition: service_started
+    networks:
+      - agri
+  
+  spark-dashboard:
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile
+    container_name: kafka-dashboard
+    env_file: .env
+    environment:
+      - SPARK_SCRIPT=kafka_grafana.py
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./scripts:/app/scripts
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      spark-master:
+        condition: service_started
+    networks:
+      - agri
+
+  spark-extract:
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile
+    environment:
+      - SPARK_SCRIPT=Spark_App_Extract_datas.py
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./scripts:/app/scripts
+    depends_on:
+      - kafka
+      - mongodb
+    networks:
+      - agri
+
+  spark-model:
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile.model
+    ports:
+      - "4040:4040"
+    environment:
+      - SPARK_SCRIPT=spark_app_prediction.py
+    volumes:
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/opt/bitnami/spark/models
+    depends_on:
+      - kafka
+      - mongodb
+      - spark-master
+    networks:
+      - agri
+
   spark-master:
-    image: bitnami/spark:latest
+    image: apache/spark:3.5.1-python3
     environment:
       - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    volumes:
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/opt/bitnami/spark/models
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark-master
     ports:
       - "7077:7077"
       - "8080:8080"
     networks:
-      - smart-agri-net
+      - agri
 
-  # Spark Worker
   spark-worker:
-    image: bitnami/spark:latest
+    image: apache/spark:3.5.1-python3
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile.model
+    volumes:
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/opt/bitnami/spark/models
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
-    depends_on:
-      - spark-master
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
     networks:
-      - smart-agri-net
+      - agri
 
-  # Spark Structured Streaming App
-  spark-streaming:
-    build: ./spark-streaming-app
-    volumes:
-      - ./models:/models   # Volume lưu model ML
-    environment:
-      - SPARK_MASTER=spark://spark-master:7077
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - MONGODB_URI=mongodb://mongodb:27017
-      - MODEL_PATH=/models
+  alert-consumer:
+    build:
+      context: .
+      dockerfile: ./consumer/Dockerfile
+    container_name: alert-consumer
+    env_file: .env 
     depends_on:
-      - spark-master
-      - kafka
-      - mongodb
+      kafka:
+        condition: service_healthy
     networks:
-      - smart-agri-net
+      - agri
+    restart: on-failure 
 
-  # MongoDB
-  mongodb:
-    image: mongo:latest
+  redis:
+      image: "redis:alpine"
+      container_name: redis
+      ports:
+        - "6379:6379"
+      networks:
+        - agri
+      healthcheck:
+        test: ["CMD", "redis-cli", "ping"]
+        interval: 5s
+        timeout: 3s
+        retries: 5
+
+  api-backend:
+    build:
+      context: .
+      dockerfile: ./api/Dockerfile
+    container_name: api-backend
+    env_file: .env
     ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db   # Volume lưu dữ liệu MongoDB
-    networks:
-      - smart-agri-net
-
-  # Notification Service (Email/SMS/quạt làm mát)
-  notification:
-    build: ./notification
-    environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - EMAIL_SERVER=smtp.example.com
-      - EMAIL_USER=alerts@example.com
-      - EMAIL_PASS=password
+      - "8000:8000" 
     depends_on:
-      - kafka
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
     networks:
-      - smart-agri-net
+      - agri
+    restart: on-failure
 
-  # API/Dashboard (Flask/FastAPI/Streamlit)
-  api-dashboard:
-    build: ./api-dashboard
+  dashboard:
+    build:
+      context: .
+      dockerfile: ./dashboard/Dockerfile
+    container_name: streamlit-dashboard
+    env_file: .env 
     ports:
-      - "8501:8501"   # Nếu dùng Streamlit
-      - "5000:5000"   # Nếu dùng Flask/FastAPI
-    environment:
-      - MONGODB_URI=mongodb://mongodb:27017
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - "8501:8501" 
     depends_on:
-      - mongodb
-      - kafka
+      - api-backend 
     networks:
-      - smart-agri-net
+      - agri
+    restart: on-failure
+
+  grafana:
+    image: grafana/grafana:latest
+    build:
+      context: .
+      dockerfile: ./grafana/Dockerfile
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - redis
+    networks:
+      - agri
+    restart: always
 
 networks:
-  smart-agri-net:
-
+  agri:
+    driver: bridge
 volumes:
-  mongo_data:
+  grafana-data:
