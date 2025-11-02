@@ -28,6 +28,7 @@ if __name__ == "__main__":
         KAFKA_BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP", "localhost:9092")
         KAFKA_TOPIC = os.environ.get("KAFKA_TOPIC_SENSOR", "sensor-data")
         KAFKA_ALERTS_TOPIC = os.environ.get("KAFKA_TOPIC_ALERTS", "alerts")
+        
         print("Configuration loaded:", flush=True)
         print(f"  MQTT: {MQTT_BROKER}:{MQTT_PORT}/{MQTT_TOPIC}", flush=True)
         print(f"  Kafka: {KAFKA_BOOTSTRAP}/{KAFKA_TOPIC}", flush=True)

@@ -5,15 +5,17 @@ from pyspark.ml import PipelineModel, Pipeline
 from pyspark.ml.feature import StringIndexer, VectorAssembler, StandardScaler
 from pymongo import MongoClient
 from datetime import datetime
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 import collections
 import os
+import redis
+import json
 
 spark = SparkSession.builder \
-    .appName("KafkaToMongoRaw") \
-    .config("spark.mongodb.output.uri", "mongodb://mongodb:27017/Realtime-project.predictions") \
+    .appName("KafkaToMongoClassification") \
+    .config("spark.mongodb.output.uri", "mongodb://mongodb:27017/Realtime-project.sensor_predicted") \
     .getOrCreate()
 
 # --- 2. Schema Kafka ---
@@ -43,6 +45,8 @@ json_df = raw_df.selectExpr("CAST(value AS STRING) as json_str") \
 def process_batch(df, epoch_id):
     if df.isEmpty():
         return
+    from pyspark.sql.functions import col, when, rand
+    import torch
 
     df = df.withColumn(
         "RGB_Damage_Score",
@@ -50,11 +54,18 @@ def process_batch(df, epoch_id):
     )
 
     pipeline_path = "/opt/bitnami/spark/models/common_preprocess_pipeline"
-    if os.path.exists(pipeline_path):
-        pipeline_model = PipelineModel.load(pipeline_path)
-    else:
+    pipeline_model = None
+    try:
+        if os.path.exists(pipeline_path):
+            pipeline_model = PipelineModel.load(pipeline_path)
+            print(f"✓ Loaded existing pipeline from {pipeline_path}")
+    except Exception as e:
+        print(f"Failed to load pipeline: {e}")
+        print("Creating new pipeline...")
+        pipeline_model = None
+    if pipeline_model is None:
         feature_cols = ["N", "P", "K", "Moisture", "pH", "Temperature", "Humidity", "RGB_Damage_Score"]
-        train_data = spark.read.csv("/opt/bitnami/spark/data/train_45000.csv", header=True, inferSchema=True)
+        train_data = spark.read.csv("/app/data/train_45000.csv", header=True, inferSchema=True)
 
         stats = train_data.select(mean(col("RGB_Damage_Score")).alias("mean"),
                                   stddev(col("RGB_Damage_Score")).alias("std")).collect()[0]
@@ -73,7 +84,13 @@ def process_batch(df, epoch_id):
         scaler = StandardScaler(inputCol="features_unscaled", outputCol="features", withMean=True, withStd=True)
         pipeline = Pipeline(stages=[indexer_NDI, indexer_PDI, assembler, scaler])
         pipeline_model = pipeline.fit(train_data)
+        
+        import shutil
+        if os.path.exists(pipeline_path):
+            shutil.rmtree(pipeline_path)
+        
         pipeline_model.save(pipeline_path)
+        print(f"Created and saved new pipeline to {pipeline_path}")
 
     # --- 5. Transform dữ liệu ---
     processed_df = pipeline_model.transform(df)
@@ -98,15 +115,15 @@ def process_batch(df, epoch_id):
             return self.model(x)
 
     # Load 2 model PyTorch
-    NDI_hidden_layers = [224, 192, 96, 224, 224, 192, 224, 64, 128, 192, 224, 160, 128, 129, 96]
+    NDI_hidden_layers = [224, 192, 96, 224, 224, 192, 224, 64, 128, 192, 224, 160, 128, 192, 96]
     activation = getattr(nn, "Tanh")
-    NDI_model = MLPClassifier(8, NDI_hidden_layers, 1, activation)
-    NDI_model.load_state_dict(torch.load("../models/best_modelNDI.pth"))
+    NDI_model = MLPClassifier(8, NDI_hidden_layers, 3, activation)
+    NDI_model.load_state_dict(torch.load("/opt/bitnami/spark/models/best_modelNDI.pth"))
 
     PDI_hidden_layers = [128, 128, 192, 256, 224, 64, 256, 224, 96]
     activation = getattr(nn, "LeakyReLU")
-    PDI_model = MLPClassifier(8, PDI_hidden_layers, 1, activation)
-    PDI_model.load_state_dict(torch.load("../models/best_modePNDI.pth"))
+    PDI_model = MLPClassifier(8, PDI_hidden_layers, 3, activation)
+    PDI_model.load_state_dict(torch.load("/opt/bitnami/spark/models/best_modelPDI.pth"))
 
     # --- 7. Dự đoán ---
     with torch.no_grad():
@@ -125,7 +142,7 @@ def process_batch(df, epoch_id):
     # --- 9. Ghi vào MongoDB ---
     client = MongoClient("mongodb://mongodb:27017/")
     db = client["Realtime-project"]
-    col = db["predictions"]
+    col = db["sensor_predicted"]
 
     result = {
         "timestamp": datetime.now().isoformat(),
@@ -134,6 +151,38 @@ def process_batch(df, epoch_id):
     }
 
     col.insert_one(result)
+    # Ghi vào Redis Stream - DÙNG KEY RIÊNG
+    try:
+        r = redis.Redis(host="redis", port=6379, db=0, decode_responses=True)
+
+        redis_prediction_data = {
+            "timestamp": datetime.now().isoformat(),
+            "NDI_Prediction": NDI_mode[0],
+            "PDI_Prediction": PDI_mode[0],
+            "NDI_confidence": round(NDI_mode[1] / len(NDI_decoded) * 100, 2),  # Thêm confidence
+            "PDI_confidence": round(PDI_mode[1] / len(PDI_decoded) * 100, 2)   # Thêm confidence
+        }
+
+        r.set("dashboard_model_predictions", json.dumps(redis_prediction_data))
+
+        r.lpush("chart_realtime_ndi_prediction", json.dumps({
+            "timestamp": datetime.now().isoformat(),
+            "prediction": NDI_mode[0],
+            "confidence": round(NDI_mode[1] / len(NDI_decoded) * 100, 2)
+        }))
+        r.ltrim("chart_realtime_ndi_prediction", 0, 49)
+
+        r.lpush("chart_realtime_pdi_prediction", json.dumps({
+            "timestamp": datetime.now().isoformat(),
+            "prediction": PDI_mode[0],
+            "confidence": round(PDI_mode[1] / len(PDI_decoded) * 100, 2)
+        }))
+        r.ltrim("chart_realtime_pdi_prediction", 0, 49)
+
+        print(f"Gửi Redis predictions thành công: {NDI_mode[0]}, {PDI_mode[0]}")
+
+    except Exception as e:
+        print(f"Lỗi ghi Redis: {e}")
 
 
 # --- 10. Chạy streaming ---

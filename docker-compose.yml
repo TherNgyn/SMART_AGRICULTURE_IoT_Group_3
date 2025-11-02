@@ -18,7 +18,7 @@ services:
       # Nội bộ 
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
       # Listener cho giao tiếp bên ngoài Docker 
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_INTERNAL://kafka:29092
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
@@ -54,18 +54,20 @@ services:
       context: .
       dockerfile: ./simulator/Dockerfile
     container_name: iot-simulator
-    env_file: .env 
+    env_file: .env
     volumes:
       - ./scripts:/app/scripts
       - ./data:/app/data
       - ./.env:/app/.env
-    depends_on:
-      - kafka 
+    user: root
     command: >
       sh -c "python /app/scripts/split_data.py && 
              python /app/scripts/iot_simulator.py"
-    networks:
+    depends_on:
+      - kafka
+    networks: 
       - agri
+
 
   bridge:
     build:
@@ -82,6 +84,34 @@ services:
     command: python /app/scripts/mqtt_kafka_bridge.py
     networks:
       - agri
+
+  mqtt-alert-consumer:
+    build:
+      context: .
+      dockerfile: ./bridge/Dockerfile
+    container_name: mqtt-alert-consumer
+    env_file: .env
+    volumes:
+      - ./scripts:/app/scripts
+      - ./.env:/app/.env
+    command: python /app/scripts/mqtt_alert_consumer.py
+    networks:
+      - agri
+    restart: on-failure
+  
+  actuator-simulator:
+    build:
+      context: .
+      dockerfile: ./bridge/Dockerfile
+    container_name: actuator-simulator
+    env_file: .env
+    volumes:
+      - ./scripts:/app/scripts
+      - ./.env:/app/.env
+    command: python /app/scripts/actuator_simulator.py
+    networks:
+      - agri
+    restart: on-failure
 
   spark-eda:
     build:
@@ -124,6 +154,61 @@ services:
         condition: service_started
     networks:
       - agri
+  
+  spark-dashboard:
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile
+    container_name: kafka-dashboard
+    env_file: .env
+    environment:
+      - SPARK_SCRIPT=kafka_grafana.py
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./scripts:/app/scripts
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      spark-master:
+        condition: service_started
+    networks:
+      - agri
+
+  spark-extract:
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile
+    environment:
+      - SPARK_SCRIPT=Spark_App_Extract_datas.py
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./scripts:/app/scripts
+    depends_on:
+      - kafka
+      - mongodb
+    networks:
+      - agri
+
+  spark-model:
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile.model
+    ports:
+      - "4040:4040"
+    environment:
+      - SPARK_SCRIPT=spark_app_prediction.py
+    volumes:
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/opt/bitnami/spark/models
+    depends_on:
+      - kafka
+      - mongodb
+      - spark-master
+    networks:
+      - agri
 
   spark-master:
     image: apache/spark:3.5.1-python3
@@ -133,6 +218,10 @@ services:
       - SPARK_RPC_ENCRYPTION_ENABLED=no
       - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
       - SPARK_SSL_ENABLED=no
+    volumes:
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/opt/bitnami/spark/models
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark-master
     ports:
@@ -143,6 +232,13 @@ services:
 
   spark-worker:
     image: apache/spark:3.5.1-python3
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile.model
+    volumes:
+      - ./scripts:/app/scripts
+      - ./data:/app/data
+      - ./models:/opt/bitnami/spark/models
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
@@ -159,8 +255,6 @@ services:
     env_file: .env 
     depends_on:
       kafka:
-        condition: service_healthy
-      mongodb:
         condition: service_healthy
     networks:
       - agri
@@ -210,6 +304,28 @@ services:
       - agri
     restart: on-failure
 
+  grafana:
+    image: grafana/grafana:latest
+    build:
+      context: .
+      dockerfile: ./grafana/Dockerfile
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - redis
+    networks:
+      - agri
+    restart: always
+
 networks:
   agri:
     driver: bridge
+volumes:
+  grafana-data:

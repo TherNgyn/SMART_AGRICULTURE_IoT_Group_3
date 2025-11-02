@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY ./api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install redis
+RUN pip install redis kafka-python fastapi
 
 COPY ./api/api.py .
 

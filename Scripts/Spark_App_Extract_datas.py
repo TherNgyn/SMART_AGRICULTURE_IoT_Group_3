@@ -7,7 +7,6 @@ from pyspark.sql import DataFrame
 # --- 1. Tạo SparkSession với MongoDB connector ---
 spark = SparkSession.builder \
     .appName("KafkaToMongoRaw") \
-    .config("spark.mongodb.output.uri", "mongodb://localhost:27017/Realtime-project.raw_data") \
     .getOrCreate()
 
 # --- Schema ---
@@ -48,8 +47,8 @@ threshold = {
 }
 
 def filter_and_save(batch_df, batch_id):
-    client = MongoClient("mongodb://localhost:27017/")
-    collection = client["Realtime-project"]["raw_data"]
+    client = MongoClient("mongodb://mongodb:27017/")
+    collection = client["Realtime-project"]["sensor_raw"]
 
     # Lấy bản ghi cuối cùng từ DB để làm reference đầu tiên
     last_ref = {}

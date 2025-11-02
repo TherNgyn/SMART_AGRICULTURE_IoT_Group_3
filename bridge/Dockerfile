@@ -1,9 +1,12 @@
-FROM python:3.11-slim
+FROM python:3.9-slim
 
 WORKDIR /app
-COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
 
-# copy scripts at runtime via volume (compose), chỉ cần tạo user non-root cho an toàn
-# RUN useradd -m appuser
-# USER appuser
+RUN pip install --no-cache-dir \
+    paho-mqtt \
+    confluent-kafka \
+    python-dotenv
+
+COPY scripts/ /app/scripts/
+
+CMD ["python", "/app/scripts/mqtt_kafka_bridge.py"]

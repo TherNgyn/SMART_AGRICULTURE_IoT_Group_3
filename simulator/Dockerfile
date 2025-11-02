@@ -1,9 +1,16 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-COPY requirements.txt /app/
+
+# Cài đặt packages với root
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# copy scripts at runtime via volume (compose), chỉ cần tạo user non-root cho an toàn
-RUN useradd -m appuser
-USER appuser
+# Tạo thư mục data và cấp quyền
+RUN mkdir -p /app/data && chmod 777 /app/data
+
+# Copy scripts
+COPY scripts/ ./scripts/
+
+# Chạy với root để tránh permission issues
+CMD ["sh", "-c", "python /app/scripts/split_data.py && python /app/scripts/iot_simulator.py"]
