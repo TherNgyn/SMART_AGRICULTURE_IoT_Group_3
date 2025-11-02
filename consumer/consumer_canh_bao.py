@@ -52,7 +52,12 @@ def send_email_alert(subject, body):
 
 def process_message(data):
     device_id = data.get('device_id', 'N/A')
-    timestamp = data.get('window', {}).get('start', time.time()) 
+
+    window_start = data.get('window', [None, None])[0]
+    window_end = data.get('window', [None, None])[1]
+    
+    timestamp = window_start if window_start else time.time() 
+    
     alerts_triggered = []
 
     alert_type = data.get('Alert_Type')
